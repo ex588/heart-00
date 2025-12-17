@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Java Jumping Heart Animation</title>
+    <style>
+        body { 
+            margin: 0; 
+            background: black; 
+        }
+        canvas { 
+            display: block; 
+            margin: 0 auto; 
+        }
+        #text { 
+            color: cyan; 
+            font: bold 24px Arial; 
+            text-align: center; 
+            margin-top: -50px; 
+        }
+    </style>
+</head>
+<body>
+    <canvas id="heartCanvas" width="999" height="777"></canvas>
+    <div id="text">May you be happy every day!</div>
+
+    <script>
+        // 常量（和Java代码一致）
+        const WIDTH = 999;
+        const HEIGHT = 777;
+        const HEART_X = WIDTH / 2;
+        const HEART_Y = HEIGHT / 2;
+        const SIDE = 11;
+        const HEART_COLOR = 'cyan';
+
+        // 爱心类
+        class Heart {
+            constructor(generateFrame) {
+                this.points = new Set();
+                this.edgeDiffusionPoints = new Set();
+                this.centerDiffusionPoints = new Set();
+                this.allPoints = new Map();
+                this.generateFrame = generateFrame;
+                this.build(2000);
+                for (let frame = 0; frame < generateFrame; frame++) {
+                    this.calc(frame);
+                }
+            }
+
+            build(number) {
+                // 生成核心点
+                for (let i = 0; i < number; i++) {
+                    const t = Math.random() * 2 * Math.PI;
+                    const point = this.heartFunction(t);
+                    this.points.add(point);
+                }
+
+                // 边缘扩散点
+                for (const point of this.points) {
+                    for (let i = 0; i < 3; i++) {
+                        const diffusedPoint = this.scatterInside(point.x, point.y, 0.05);
+                        this.edgeDiffusionPoints.add(diffusedPoint);
+                    }
+                }
+
+                // 中心扩散点
+                const pointList = Array.from(this.points);
+                for (let i = 0; i < 4000; i++) {
+                    const point = pointList[Math.floor(Math.random() * pointList.length)];
+                    const diffusedPoint = this.scatterInside(point.x, point.y, 0.17);
+                    this.centerDiffusionPoints.add(diffusedPoint);
+                }
+            }
+
+            heartFunction(t) {
+                const x = 16 * Math.pow(Math.sin(t), 3);
+                const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+                return { x: Math.floor(x * SIDE) + HEART_X, y: Math.floor(y * SIDE) + HEART_Y };
+            }
+
+            scatterInside(x, y, rate) {
+                const dx = rate * (Math.random() - 0.5) * WIDTH;
+                const dy = rate * (Math.random() - 0.5) * HEIGHT;
+                return { x: Math.floor(x + dx), y: Math.floor(y + dy) };
+            }
+
+            calc(frame) {
+                const framePoints = [];
+                
+                // ⭐⭐⭐ 核心调整：大幅放慢时间流速 ⭐⭐⭐
+                // 将 0.5 改为 0.2，让动画慢得像慢动作回放
+                const slowFrame = frame * 0.2;
+                
+                // 使用平滑的正弦波，但拉长周期
+                // 这样爱心会慢慢收缩，然后慢慢舒张，没有急促感
+                const beat = (Math.sin(slowFrame * 0.5) + 1) * 0.5; // 转换为 0～1 的范围
+                
+                // 增加一个“蓄力”效果，让收缩更彻底
+                // 当 beat 小时（收缩状态），factor 会变得很小
+                const factor = beat * beat; 
+
+                // 核心点：利用这个缩放因子
+                // 系数稍微调小一点，配合慢节奏，避免跳得太散
+                let coefficient = 8 * factor;
+                for (const point of this.points) {
+                    const results = this.calcPosition(point.x, point.y, coefficient);
+                    const result = results[Math.floor(Math.random() * results.length)];
+                    framePoints.push({ x: result.x, y: result.y });
+                }
+
+                // 边缘扩散点 (跟随)
+                coefficient = 8 * factor * 0.7;
+                for (const point of this.edgeDiffusionPoints) {
+                    const results = this.calcPosition(point.x, point.y, coefficient);
+                    const result = results[Math.floor(Math.random() * results.length)];
+                    framePoints.push({ x: result.x, y: result.y });
+                }
+
+                // 中心扩散点 (反向逻辑，收缩时向内吸)
+                // 这里也变慢，跟随主节奏
+                coefficient = 1.5 * (1 - factor * 0.5);
+                for (const point of this.centerDiffusionPoints) {
+                    const results = this.calcPosition(point.x, point.y, coefficient);
+                    const result = results[Math.floor(Math.random() * results.length)];
+                    framePoints.push({ x: result.x, y: result.y });
+                }
+
+                this.allPoints.set(frame, framePoints);
+            }
+
+            curve(p) {
+                return 1;
+            }
+
+            calcPosition(x, y, ratio) {
+                // 强制最小位移
+                const r = Math.max(ratio, 1);
+                const dx = r * (x - HEART_X) * 0.005 + this.random(-0.5, 0.5);
+                const dy = r * (y - HEART_Y) * 0.005 + this.random(-0.5, 0.5);
+                return [
+                    { x: Math.floor(x + dx), y: Math.floor(y + dy) },
+                    { x: Math.floor(x - dx), y: Math.floor(y - dy) }
+                ];
+            }
+
+            random(min, max) {
+                return min + Math.random() * (max - min);
+            }
+
+            render(ctx, frame) {
+                if (this.allPoints.has(frame)) {
+                    const points = this.allPoints.get(frame);
+                    ctx.fillStyle = HEART_COLOR;
+                    for (const point of points) {
+                        ctx.fillRect(point.x, point.y, 2, 2);
+                    }
+                }
+            }
+        }
+
+        // 初始化画布
+        const canvas = document.getElementById('heartCanvas');
+        const ctx = canvas.getContext('2d');
+        // 增加帧数以适应更慢的节奏
+        const heart = new Heart(60); 
+        let frame = 0;
+
+        // 动画循环
+        function animate() {
+            ctx.clearRect(0, 0, WIDTH, HEIGHT);
+            heart.render(ctx, frame);
+            
+            // 这里控制循环
+            frame = (frame + 1) % heart.generateFrame; 
+            
+            requestAnimationFrame(animate);
+        }
+
+        // 启动动画
+        animate();
+    </script>
+</body>
+</html>
